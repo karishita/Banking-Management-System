@@ -28,13 +28,14 @@ void display_custmenu()
 	printf("6. Change Password\n");
 	printf("7. Add Feedback\n");
 	printf("8. View Transaction History\n");
-	printf("9. Logout");
-	printf("10. Exit");
+	printf("9. Logout\n");
+	printf("10. Exit\n");
 }
 int main() {
     int sd;
     struct sockaddr_in serv;
     char buf[50] = {0};
+    char buf_c[50]={0};
     int flag=0;
     int e=0;
     sd = socket(AF_INET, SOCK_STREAM, 0);
@@ -125,8 +126,28 @@ int main() {
     flag=1;
     }
     //customer logged in. Display Customer menu
-   if(ch==1) 
+   if(ch==1)
+   { 
      display_custmenu();
+     int a;
+     printf("Enter your choice \n");
+     fflush(stdout);
+     scanf("%d",&a);
+     write(sd,&a, sizeof(a)); // send choice to server
+
+     if(a==9)
+     {
+	    
+	    
+	   // read server response
+          
+             int n = read(sd, buf_c, sizeof(buf)-1);
+             if(n > 0) {
+             buf_c[n] = '\0';
+             printf("%s\n", buf_c);
+         }
+     }
+   }
    // employee logged in. Display Employee menu
    if(ch==2)
 	   printf("Employee menu coming soon..\n");

@@ -7,6 +7,7 @@
 #include <string.h>
 #include <stdlib.h>
 
+
 struct cust_cred {
     char username[6];
     char password[6];
@@ -16,6 +17,17 @@ struct emp_cred{
         char username[6];
         char password[6];
 };
+//structure to store details of an active session
+struct session
+{
+	//int nsd;
+	int fd;
+	off_t offset;
+	char username[6];
+	int active;
+};
+
+struct session sessions[10];  // for storing details about the logged in user for releasing the lock on the file when the user logs out
 
 //Verify Employee Credentials
 
@@ -60,6 +72,7 @@ int verify_cust(struct cust_cred recv_acc,int nsd)
             struct cust_cred temp;
             
             int found = 0;
+	    off_t offset=0;
 
             while(read(fd, &temp, sizeof(temp)) == sizeof(temp)) {
                 temp.username[5] = '\0';
@@ -70,15 +83,45 @@ int verify_cust(struct cust_cred recv_acc,int nsd)
                 if(strcmp(temp.username, recv_acc.username) == 0)
 		{
                  if( strcmp(temp.password, recv_acc.password) == 0) {
-                    found = 1;
-                    break;
+                    
+		    struct flock lock;
+		    lock.l_type=F_WRLCK;
+		    lock.l_whence=SEEK_SET;
+		    lock.l_start=offset;
+		    lock.l_len=sizeof(temp);
+		    lock.l_pid=getpid();
+
+		    if(fcntl(fd,F_SETLK,&lock)==-1)
+			    found=-2;  //already locked (user logged in)
+		    else
+		    {
+			    found=1;  // login success +session locked
+		           for(int i=0;i<10;i++)
+			   {
+				   if(!sessions[i].active)
+				   {
+				   strcpy(sessions[i].username,recv_acc.username);                                   sessions[i].username[5]='\0';
+				  // sessions[i].nsd=nsd;
+				   sessions[i].offset=offset;
+				   sessions[i].active=1;
+				   sessions[i].fd=fd;
+				   break;
+				   }
+			   }
+		            
+                 
+                    return found;
+		    }
                 }
 		 else 
-	         found=-1;
+	         found=-1; // wrong password
+	         break;
             }
+		offset=offset+sizeof(temp);
 	    }
+	    close(fd);
 	    return found;
-            close(fd);
+            
 
 
 }
@@ -104,12 +147,21 @@ void signup_cust(struct cust_cred recv_acc, int nsd)
                 close(fd);
 }
 
-
+void logout_cust(int fd,off_t offset)
+{
+	struct flock lock;
+	lock.l_type=F_UNLCK;
+	lock.l_whence=SEEK_SET;
+	lock.l_start=offset;
+	lock.l_len=sizeof(struct cust_cred);
+	fcntl(fd,F_SETLK,&lock);
+}
 
 
 int main() {
     int sd, nsd, sz;
     struct sockaddr_in serv, cli;
+    
 
     sd = socket(AF_INET, SOCK_STREAM, 0);
     if(sd < 0) { perror("socket"); exit(1); }
@@ -125,6 +177,11 @@ int main() {
 
 
     while(1) {
+
+	for(int i=0;i<10;i++)
+	{
+		sessions[i].active=0;
+	}
         sz = sizeof(cli);
         nsd = accept(sd, (struct sockaddr *)&cli, &sz);
         if(nsd < 0) { perror("accept"); continue; }
@@ -157,9 +214,37 @@ int main() {
 	    {
 		    write(nsd, "Wrong password try again\n",strlen("Wrong password try again\n"));
 	    }
+
+	    else if(found==-2)
+	    {          
+		    write(nsd,"User already Logged in\n",strlen("User already Logged in\n"));                                                                               
+	    }
             else {
               signup_cust(recv_acc,nsd);  
             }
+
+            if(found==1)
+	    {
+	    int a;
+	    read(nsd,&a,sizeof(a));
+	    if(a==9)
+	    {
+		    int fd;
+		    off_t offset;
+	        for(int i=0;i<10;i++)
+		{
+			if(strcmp(recv_acc.username,sessions[i].username)==0)
+			{
+				fd=sessions[i].fd;
+				fd=sessions[i].offset;
+				sessions[i].active=0;
+				break;
+			}
+		}
+		 logout_cust(fd,offset);
+		 write(nsd,"Logged out successfully\n",strlen("Logged out successfully\n"));
+	    }
+	    }
 	    }
               
 	    if(ch==2)
