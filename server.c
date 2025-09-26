@@ -7,12 +7,12 @@
 #include <string.h>
 #include <stdlib.h>
 
-
+//session to store customer username and password
 struct cust_cred {
     char username[6];
     char password[6];
 };
-
+// structure to store employee username and password
 struct emp_cred{
         char username[6];
         char password[6];
@@ -25,6 +25,14 @@ struct session
 	off_t offset;
 	char username[6];
 	int active;
+};
+//Store Account details of customer
+struct account
+{
+	int acc_no; //account number
+	char username[6]; // same as login user name
+	int active; /* 0 ->not active, 1-> active*/
+        double balance;
 };
 
 struct session sessions[10];  // for storing details about the logged in user for releasing the lock on the file when the user logs out
@@ -100,7 +108,8 @@ int verify_cust(struct cust_cred recv_acc,int nsd)
 			   {
 				   if(!sessions[i].active)
 				   {
-				   strcpy(sessions[i].username,recv_acc.username);                                   sessions[i].username[5]='\0';
+				   strcpy(sessions[i].username,recv_acc.username);                                  
+				   sessions[i].username[5]='\0';
 				  // sessions[i].nsd=nsd;
 				   sessions[i].offset=offset;
 				   sessions[i].active=1;
@@ -147,6 +156,7 @@ void signup_cust(struct cust_cred recv_acc, int nsd)
                 close(fd);
 }
 
+//Logging out
 void logout_cust(int fd,off_t offset)
 {
 	struct flock lock;
@@ -157,11 +167,50 @@ void logout_cust(int fd,off_t offset)
 	fcntl(fd,F_SETLK,&lock);
 }
 
+//Add Customer
+void add_customer(struct account acc,int nsd)
+{
+	//struct account acc1;
+/*	printf("Enter account number\n");
+	scanf("%d",&acc.acc_no);
+	printf("Enter balance to deposit(Minimum balance=1000)\n");
+	scanf("%lf",&acc.balance);
+	printf("Enter username(same as login)\n");
+	scanf("%s",acc.username);
+	acc.username[5]='\0';
+	acc.active=1;
+	*/
+	read(nsd,&acc,sizeof(acc));
+	int fd=open("account.txt",O_CREAT|O_RDWR,0744);
+	lseek(fd,0,SEEK_END);
+	write(fd,&acc,sizeof(acc));
+	close(fd);
 
+}
+
+//View Balance
+double view_balance(int account_no)
+{  
+  struct account acc;
+  int fd=open("account.txt",O_RDWR,0744);
+  lseek(fd,0,SEEK_SET);
+  while(read(fd,&acc,sizeof(acc))==sizeof(acc))
+  {
+	  if(account_no==acc.acc_no)
+		  return acc.balance;
+	  else
+		  return 0.0;
+  }
+
+}
+
+// 
 int main() {
     int sd, nsd, sz;
     struct sockaddr_in serv, cli;
-    
+    int found;
+    int ch;
+    struct cust_cred recv_acc = {0};
 
     sd = socket(AF_INET, SOCK_STREAM, 0);
     if(sd < 0) { perror("socket"); exit(1); }
@@ -188,13 +237,14 @@ int main() {
 
         if(fork() == 0) { // child process
             close(sd);
-	    int ch;
+	    
+	   // int ch;
 	    read(nsd,&ch,sizeof(ch));
 	    //printf("Choice entered is %d",ch);
 	    if(ch==1)
 	    {
             
-            struct cust_cred recv_acc = {0};
+           // struct cust_cred recv_acc = {0};
             if(read(nsd, &recv_acc, sizeof(recv_acc)) != sizeof(recv_acc)) {
                 perror("read failed");
                 close(nsd);
@@ -204,7 +254,7 @@ int main() {
             // Ensure null-termination
             recv_acc.username[5] = '\0';
             recv_acc.password[5] = '\0';
-            int found=verify_cust(recv_acc,nsd);
+            found=verify_cust(recv_acc,nsd);
 
             if(found==1)
 	    {
@@ -222,13 +272,28 @@ int main() {
             else {
               signup_cust(recv_acc,nsd);  
             }
+	    }
+	    
 
             if(found==1)
 	    {
 	    int a;
+	    
+         	    
 	    read(nsd,&a,sizeof(a));
+	    if(a==1)
+	    {
+		    //View Account Balance
+		    double balance;
+		    int account_no;
+	            read(nsd,&account_no,sizeof(account_no));
+		    balance=view_balance(account_no);
+		    write(nsd,&balance,sizeof(balance));
+
+	    }
 	    if(a==9)
 	    {
+		    //Logout Customer
 		    int fd;
 		    off_t offset;
 	        for(int i=0;i<10;i++)
@@ -243,14 +308,17 @@ int main() {
 		}
 		 logout_cust(fd,offset);
 		 write(nsd,"Logged out successfully\n",strlen("Logged out successfully\n"));
+		 
 	    }
-	    }
+	   
 	    }
               
 	    if(ch==2)
             {
 
             struct emp_cred recv_acc = {0};
+	    
+	    
             if(read(nsd, &recv_acc, sizeof(recv_acc)) != sizeof(recv_acc)) {
                 perror("read failed");
                 close(nsd);
@@ -273,14 +341,31 @@ int main() {
             else {
               signup_emp(recv_acc,nsd);
             }
+	    
+	    if(found==1)
+	    {
+              
+		    int a ;
+		    
+                 
+		    read(nsd,&a,sizeof(a));
+		    if(a==1)
+		    {   //Add new Customer 
+			 struct account acc;
+			 add_customer(acc,nsd);
+			 write(nsd,"New Customer Account Added\n",strlen("New Customer Account Added\n"));
+		    }
+		 
+	    }
             }
-
+         
             //close(fd);
-            close(nsd);
+            // close(nsd);
             exit(0);
         } else {
             close(nsd); // parent closes client socket
         }
+	
     }
 
     close(sd);

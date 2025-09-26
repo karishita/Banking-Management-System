@@ -7,6 +7,15 @@
 #include <string.h>
 #include <stdlib.h>
 
+
+struct account
+{
+        int acc_no; //account number
+        char username[6]; // same as login user name
+        int active; /* 0 ->not active, 1-> active*/
+        double balance;
+};
+
 struct cust_cred {
     char username[6];
     char password[6];
@@ -31,12 +40,27 @@ void display_custmenu()
 	printf("9. Logout\n");
 	printf("10. Exit\n");
 }
+
+void display_empmenu()
+{
+	printf("Welcome\n");
+	printf("1.Add new customer\n");
+	printf("2.Modify customer details\n");
+	printf("3.Process Loan Applications\n");
+	printf("4.Approve/Reject Loans\n");
+	printf("5.View Assigned Loan applications\n");
+	printf("6.View Customer Transactions\n");
+	printf("7. Change Password\n");
+	printf("8. Logout\n");
+	printf("9. Exit\n");
+}
 int main() {
     int sd;
     struct sockaddr_in serv;
     char buf[50] = {0};
     char buf_c[50]={0};
-    int flag=0;
+    char buf_e[50]={0};
+    int flag_login=0;
     int e=0;
     sd = socket(AF_INET, SOCK_STREAM, 0);
     if(sd < 0) { perror("socket"); exit(1); }
@@ -50,7 +74,7 @@ int main() {
     }
     int ch;
     // if Wrong password or a new user signup happened display the login menu again
-    while(flag==0)
+    while(flag_login==0)
     {
     printf("Welcome to banking management system\n");
     printf("____________________________________\n");
@@ -123,34 +147,80 @@ int main() {
    }
 
     if(strcmp(buf,"Login successful\n")==0) // login successful so dont need to show the login menu again 
-    flag=1;
+    flag_login=1;
     }
     //customer logged in. Display Customer menu
    if(ch==1)
    { 
+     int a=0;
+     int flag_cust=0;
+     while(flag_cust==0)
+     {
      display_custmenu();
-     int a;
+     
      printf("Enter your choice \n");
      fflush(stdout);
-     scanf("%d",&a);
+     scanf(" %d",&a);
      write(sd,&a, sizeof(a)); // send choice to server
-
-     if(a==9)
-     {
-	    
-	    
-	   // read server response
-          
-             int n = read(sd, buf_c, sizeof(buf)-1);
+     
+	 
+       if(a==1)
+      {
+	      int account_no;
+	      printf("Enter your account_no\n");
+	      scanf("%d",&account_no);
+	      write(sd,&account_no,sizeof(account_no)); // send account number
+	      // read server response
+	      double balance;
+	      read(sd,&balance,sizeof(balance));
+	      if(balance>0.000000)
+		      printf("Your Account Balance is %f \n",balance);
+	      else
+		      printf("No Account found. Contact Bank \n");
+      }
+	  if(a==9)
+	  {
+             flag_cust=1;
+	     //Read server Response 
+	     int n = read(sd, buf_c, sizeof(buf_c)-1);
              if(n > 0) {
              buf_c[n] = '\0';
              printf("%s\n", buf_c);
-         }
+	  }
+	  }	     
+	   
      }
    }
    // employee logged in. Display Employee menu
    if(ch==2)
-	   printf("Employee menu coming soon..\n");
+   {
+     display_empmenu();
+     int a ;
+     printf("Enter your choice \n");
+     fflush(stdout);
+     scanf("%d",&a);
+     write(sd,&a,sizeof(a)); // send choice to server
+     if(a==1)
+     {
+        struct account acc;
+	 printf("Enter account number\n");
+        scanf("%d",&acc.acc_no);
+        printf("Enter balance to deposit(Minimum balance=1000)\n");
+        scanf("%lf",&acc.balance);
+        printf("Enter username(same as login)\n");
+        scanf("%s",acc.username);
+        acc.username[5]='\0';
+        acc.active=1;
+        write(sd,&acc,sizeof(acc));
+     }
+     //read server response
+     int n = read(sd, buf_e, sizeof(buf)-1);
+             if(n > 0) {
+             buf_e[n] = '\0';
+             printf("%s\n", buf_e);
+         }
+
+   }
    // exit(5th option ) was chosen so close connection
    if(e==1)
     {
@@ -158,4 +228,5 @@ int main() {
     return 0;
     }
 }
+
 
