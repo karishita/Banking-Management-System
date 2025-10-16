@@ -6,7 +6,7 @@
 #include <fcntl.h>
 #include <string.h>
 #include <stdlib.h>
-
+#include<time.h>
 //session to store customer username and password
 struct cust_cred {
     char username[6];
@@ -33,6 +33,15 @@ struct account
 	char username[6]; // same as login user name
 	int active; /* 0 ->not active, 1-> active*/
         double balance;
+};
+// store transaction details
+struct transaction
+{
+	int acc_no;
+	char type[10];//deposit or withdraw
+	double amt;
+	time_t timestamp;
+
 };
 
 struct session sessions[10];  // for storing details about the logged in user for releasing the lock on the file when the user logs out
@@ -193,18 +202,220 @@ double view_balance(int account_no)
 {  
   struct account acc;
   int fd=open("account.txt",O_RDWR,0744);
+  if(fd<0)
+  {
+	  perror("open");
+	  return -1.0;
+  }
   lseek(fd,0,SEEK_SET);
   while(read(fd,&acc,sizeof(acc))==sizeof(acc))
   {
 	  if(account_no==acc.acc_no)
+	  {  
+		  //found
+		  close(fd); 
 		  return acc.balance;
-	  else
-		  return 0.0;
+	  }
   }
+	  close(fd);
+	  return 0.0;//not found
+  
+}
+
+//deposit money
+int deposit_money(double amt,int account_no)
+{
+printf("amount to be deposited is %lf\n",amt);
+struct account acc;
+struct transaction tx;
+int fd=open("account.txt",O_RDWR,0744);
+int fd_t = open("transactions.txt", O_CREAT | O_APPEND | O_WRONLY, 0744);
+if(fd<0)
+{
+	perror("open");
+	return -1;
+}
+lseek(fd,0,SEEK_SET);
+while(read(fd,&acc,sizeof(acc))==sizeof(acc))
+{
+	printf("Looking for acc_no=%d, got acc_no=%d from file\n", account_no, acc.acc_no);
+
+	if(account_no==acc.acc_no)
+	{
+	    
+            acc.balance=acc.balance+amt;
+	    lseek(fd,-sizeof(acc),SEEK_CUR);
+	    write(fd,&acc,sizeof(acc));
+            tx.acc_no=account_no;
+	    strcpy(tx.type,"deposit");
+	    tx.type[10]='\0';
+	    tx.amt=amt;
+	    tx.timestamp=time(NULL);
+	    write(fd_t,&tx,sizeof(tx));
+	    close(fd);
+	    close(fd_t);
+	    return 1;
+	}
+}
+
+close(fd);
+close(fd_t);
+return 0;
+
+}
+//withdraw money
+int withdraw_money(double amt,int account_no)
+{
+struct transaction tx;
+printf("amount to be deposited is %lf\n",amt);
+struct account acc;
+int fd=open("account.txt",O_RDWR,0744);
+int fd_t = open("transactions.txt", O_CREAT | O_APPEND | O_WRONLY, 0744);
+if(fd<0)
+{
+        perror("open");
+        return -1;
+}
+lseek(fd,0,SEEK_SET);
+while(read(fd,&acc,sizeof(acc))==sizeof(acc))
+{
+        printf("Looking for acc_no=%d, got acc_no=%d from file\n", account_no, acc.acc_no);
+
+        if(account_no==acc.acc_no)
+        {
+		if(acc.balance-amt<1000)
+			return -2;
+	
+            else
+	    {
+            acc.balance=acc.balance-amt;
+            lseek(fd,-sizeof(acc),SEEK_CUR);
+            write(fd,&acc,sizeof(acc));
+	    tx.acc_no=account_no;
+            strcpy(tx.type,"withdraw");
+            tx.type[10]='\0';
+            tx.amt=amt;
+            tx.timestamp=time(NULL);
+            write(fd_t,&tx,sizeof(tx));
+
+            close(fd);
+
+            return 1;
+	    }
+        }
+}
+
+close(fd);
+return 0;
+
+}
+ 
+//Transfer Funds
+
+int transfer(int source,int dest,double amt)
+{
+
+	struct account acc;
+	struct transaction tx,tx1;
+	int d=0;
+	int fd=open("account.txt",O_RDWR,0744);
+	int fd_t = open("transactions.txt", O_CREAT | O_APPEND | O_WRONLY, 0744);
+        if(fd<0)
+{
+        perror("open");
+        return -1;
+}
+lseek(fd,0,SEEK_SET);
+//looking for source account
+	while(read(fd,&acc,sizeof(acc))==sizeof(acc))
+{
+        printf("Looking for acc_no=%d, got acc_no=%d from file\n", source, acc.acc_no);
+
+        if(source==acc.acc_no)
+        {
+                if(acc.balance-amt<1000)
+                        return -2;
+
+            else
+            {
+	    //deducting amt
+            acc.balance=acc.balance-amt;
+            lseek(fd,-sizeof(acc),SEEK_CUR);
+            write(fd,&acc,sizeof(acc));
+	    tx.acc_no=source;
+            strcpy(tx.type,"withdraw");
+            tx.type[10]='\0';
+            tx.amt=amt;
+            tx.timestamp=time(NULL);
+            write(fd_t,&tx,sizeof(tx));
+
+            //close(fd);
+            //return 1;
+	    d=1;
+            }
+        
+}
+
+}
+if(d==0)
+	return 0;
+
+// looking for destination account
+
+lseek(fd,0,SEEK_SET);
+while(read(fd,&acc,sizeof(acc))==sizeof(acc))
+{
+        printf("Looking for acc_no=%d, got acc_no=%d from file\n", dest, acc.acc_no);
+
+        if(dest==acc.acc_no)
+        {
+
+            acc.balance=acc.balance+amt;
+            lseek(fd,-sizeof(acc),SEEK_CUR);
+            write(fd,&acc,sizeof(acc));
+	    tx1.acc_no=dest;
+            strcpy(tx1.type,"deposit");
+            tx1.type[10]='\0';
+            tx1.amt=amt;
+            tx1.timestamp=time(NULL);
+            write(fd_t,&tx1,sizeof(tx));
+
+            close(fd);
+	    close(fd_t);
+            return 1;
+        }
+}
+
+close(fd);
+return 0;
 
 }
 
-// 
+
+// view transaction history
+
+int view_transaction(int acc_no, struct transaction* arr, int max) {
+    struct transaction tx;
+    int fd = open("transactions.txt", O_RDONLY);
+    if (fd < 0) {
+        perror("open transactions");
+        return -1;  // error
+    }
+
+    int count = 0;
+    while (read(fd, &tx, sizeof(tx)) == sizeof(tx)) {
+        if (tx.acc_no == acc_no) {
+            if (count < max) {   
+                arr[count++] = tx;
+            }
+        }
+    }
+
+    close(fd);
+    return count;   
+}
+
+
 int main() {
     int sd, nsd, sz;
     struct sockaddr_in serv, cli;
@@ -291,6 +502,106 @@ int main() {
 		    write(nsd,&balance,sizeof(balance));
 
 	    }
+          // deposit money
+	    if(a==2)
+	    {
+		    //double amt;
+		    //int acc_no;
+		     struct temp
+               {
+                       int acc_no;
+                       double amt;
+               }acc;
+
+		    read(nsd,&acc,sizeof(acc));
+		    //read(nsd,&acc_no,sizeof(acc_no));
+		    int status;
+		    
+		    status=deposit_money(acc.amt,acc.acc_no);
+		   
+
+		    if(status==1)
+			    write(nsd,"Amount deposited\n",strlen("Amount deposited\n"));
+		    else if(status==0)
+			    write(nsd,"No account found\n",strlen("No account found\n"));
+		    else
+			    write(nsd,"Error!",strlen("Error!"));
+
+	    }
+	    //Withdraw money
+	    if(a==3)
+	    {
+	    struct temp
+               {
+                       int acc_no;
+                       double amt;
+               }acc;
+
+                    read(nsd,&acc,sizeof(acc));
+                    //read(nsd,&acc_no,sizeof(acc_no));
+                    int status;
+
+                    status=withdraw_money(acc.amt,acc.acc_no);
+
+
+                    if(status==1)
+                            write(nsd,"Amount withdrawn\n",strlen("Amount deposited\n"));
+                    else if(status==0)
+                            write(nsd,"No account found\n",strlen("No account found\n"));
+		    else if(status==-2)
+			    write(nsd,"Insufficient fund!cant withdraw\n",strlen("Insufficient fund!cant withdraw\n"));
+                    else
+                            write(nsd,"Error!",strlen("Error!"));
+
+ 
+	    }
+       
+	    //Transfer funds
+	    if(a==4)
+	    {
+		     struct temp
+               {
+                       int source;
+                       int des;
+                       double amt;
+               }acc;
+
+                  read(nsd,&acc,sizeof(acc));
+		  int status=transfer(acc.source,acc.des,acc.amt);
+		  if(status==1)
+			  write(nsd,"Transfer successful\n",strlen("Transfer successful\n"));
+		  else if(status==0)
+			  write(nsd,"No account found\n",strlen("No account found\n"));
+		  else if(status==-2)
+			  write(nsd,"Insufficient fund\n",strlen("Insufficient fund\n"));
+		  else
+			  write(nsd,"Error\n",strlen("Error\n"));
+
+	    }
+// View Transaction History
+	    if(a==8)
+	    {
+		    if (a == 8) {
+    int acc_no;
+    if (read(nsd, &acc_no, sizeof(acc_no)) <= 0) {
+        perror("read acc_no");
+        return;
+    }
+
+    struct transaction tx[100];
+    int n = view_transaction(acc_no, tx, 100);
+
+    if (n == -1) {
+        write(nsd, "Error opening file\n", sizeof("Error opening file\n"));
+    } else if (n == 0) {
+        write(nsd, "No transaction found\n", sizeof("No transaction found\n"));
+    } else {
+        
+        write(nsd, tx, n * sizeof(struct transaction));
+    }
+}
+
+		    }
 	    if(a==9)
 	    {
 		    //Logout Customer

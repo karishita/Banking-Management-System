@@ -6,7 +6,15 @@
 #include <arpa/inet.h>
 #include <string.h>
 #include <stdlib.h>
+#include<time.h>
+struct transaction
+{
+        int acc_no;
+        char type[10];//deposit or withdraw
+        double amt;
+        time_t timestamp;
 
+};
 
 struct account
 {
@@ -163,7 +171,7 @@ int main() {
      scanf(" %d",&a);
      write(sd,&a, sizeof(a)); // send choice to server
      
-	 
+//view account balance	 
        if(a==1)
       {
 	      int account_no;
@@ -173,11 +181,136 @@ int main() {
 	      // read server response
 	      double balance;
 	      read(sd,&balance,sizeof(balance));
-	      if(balance>0.000000)
+	      if(balance<0.0)
+		      printf("Error reading account file\n");
+	      else if(balance>0.000000)
 		      printf("Your Account Balance is %f \n",balance);
 	      else
 		      printf("No Account found. Contact Bank \n");
       }
+
+       //deposit money
+       if(a==2)
+       {
+	       double amt;
+	       int acc_no;
+	       char buf[50];
+	       printf("Enter amount to be deposited\n");
+	       scanf("%lf",&amt);
+	       printf("Enter your account number\n");
+	       scanf("%d",&acc_no);
+	       //sending in a structure otherwise sending individually was giving error
+	       struct temp
+	       {
+		       int acc_no;
+		       double amt;
+	       }acc;
+               acc.acc_no=acc_no;
+	       acc.amt=amt;
+	       //send amount to server
+	       write(sd,&acc,sizeof(acc));
+	       //Cwrite(sd,&amt,sizeof(acc_no));
+	       int n = read(sd, buf, sizeof(buf)-1);
+             if(n > 0) {
+             buf[n] = '\0';
+             printf("%s\n", buf);
+	     }
+
+       }
+
+       //withdraw money
+       if(a==3)
+       {
+	       double amt;
+               int acc_no;
+               char buf[50];
+               printf("Enter amount to be withdrawn\n");
+               scanf("%lf",&amt);
+               printf("Enter your account number\n");
+               scanf("%d",&acc_no);
+               //sending in a structure otherwise sending individually was giving error
+               struct temp
+               {
+                       int acc_no;
+                       double amt;
+               }acc;
+               acc.acc_no=acc_no;
+               acc.amt=amt;
+               //send amount to server
+               write(sd,&acc,sizeof(acc));
+               //Cwrite(sd,&amt,sizeof(acc_no));
+               int n = read(sd, buf, sizeof(buf)-1);
+             if(n > 0) {
+             buf[n] = '\0';
+             printf("%s\n", buf);
+             }
+
+       }
+// Transfer fund
+       if(a==4)
+       {
+	       char buf[50];
+	       struct temp
+	       {
+		       int source;
+		       int des;
+		       double amt;
+	       }temp;
+	       printf("Enter your account number \n");
+	       scanf("%d",&temp.source);
+	       printf("Enter the account number where you want to transfer fund\n");
+	       scanf("%d",&temp.des);
+	       printf("Enter amount\n");
+	       scanf("%lf",&temp.amt);
+	       write(sd,&temp,sizeof(temp));
+	       int n = read(sd, buf, sizeof(buf)-1);
+             if(n > 0) {
+             buf[n] = '\0';
+             printf("%s\n", buf);
+             }
+       }
+// View Transaction History
+       
+if (a == 8) {
+    int acc_no;
+    printf("Enter account number: ");
+    scanf("%d", &acc_no);
+
+    
+    write(sd, &acc_no, sizeof(acc_no));
+
+    
+    struct transaction arr[50];
+    ssize_t bytes_read = read(sd, arr, sizeof(arr));
+
+   
+
+    int num_records = bytes_read / sizeof(struct transaction);
+    printf("\n--- Transaction History for Account %d ---\n", acc_no);
+
+    for (int i = 0; i < num_records; i++) {
+        if(acc_no==arr[i].acc_no)
+	{
+        char *time_str = ctime(&arr[i].timestamp);
+        if (time_str) {
+            time_str[strlen(time_str) - 1] = '\0'; 
+        }
+
+        printf("Account: %d | Amount: %.2lf | Type: %s | Time: %s\n",
+               arr[i].acc_no, arr[i].amt, arr[i].type,
+               time_str ? time_str : "Unknown");
+    }
+
+    if (num_records == 0) {
+        printf("No transactions found or file empty.\n");
+    }
+    }
+
+    printf("-------------------------------------------\n");
+}
+
+       
+       //logout
 	  if(a==9)
 	  {
              flag_cust=1;
