@@ -34,6 +34,20 @@ struct emp_cred{
 	char password[6];
 };
 
+struct loan
+{
+        int acc_no;
+        double amt;
+        char type[20];
+        char status;
+	int id;
+};
+
+struct feedback{
+        char username[6];
+        char message[200];
+};
+
 void display_custmenu()
 {
 	printf("Welcome\n");
@@ -269,6 +283,68 @@ int main() {
              printf("%s\n", buf);
              }
        }
+//Apply for loan
+  if(a==5)
+  {
+     struct loan ln;
+     printf("Enter account number\n");
+     scanf("%d",&ln.acc_no);
+
+     printf("Enter Loan amount\n");
+     scanf("%lf",&ln.amt);
+
+
+     printf("Enter loan type(hom/personal/education)\n");
+     scanf("%s",ln.type);
+
+     write(sd,&ln,sizeof(ln));
+     char msg[100];
+     int bytes=read(sd,msg,sizeof(msg)-1);
+     msg[bytes]='\0';
+     printf("%s\n",msg);
+  }
+
+  //Change password
+  
+  if(a==6)
+  {
+    char msg[100];
+    struct cust_cred c;
+    printf("Enter username\n");
+    scanf("%s",c.username);
+    c.username[sizeof(c.username)-1]='\0';
+    printf("Enter new password\n");
+    scanf("%s",c.password);
+    c.password[sizeof(c.password)-1]='\0';
+    write(sd,&c,sizeof(c));
+    int bytes = read(sd, msg, sizeof(msg) - 1);
+    msg[bytes] = '\0';
+    printf("%s\n", msg);
+  }
+// add feedback
+  if(a==7)
+  { 
+    struct feedback fb;
+    char msg[100];
+
+    printf("Enter your username: ");
+    scanf("%s", fb.username);
+    getchar();  // consume leftover newline
+
+    printf("Enter your feedback (max 200 chars): ");
+    fgets(fb.message, sizeof(fb.message), stdin);
+
+    fb.message[strcspn(fb.message, "\n")] = '\0';  // remove newline if present
+
+    // Send to server
+    write(sd, &fb, sizeof(fb));
+
+    // Read response
+    int bytes = read(sd, msg, sizeof(msg) - 1);
+    msg[bytes] = '\0';
+    printf("%s\n", msg);
+  }
+
 // View Transaction History
        
 if (a == 8) {

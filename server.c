@@ -43,6 +43,123 @@ struct transaction
 	time_t timestamp;
 
 };
+// structure to store loan details of a customer
+struct loan
+{
+	int acc_no;
+	double amt;
+	char type[20];
+	char status;
+	int id;
+};
+//store feedback of customer
+struct feedback{
+	char username[6];
+	char message[200];
+};
+
+void lock_file(int fd, int lock_type) {
+    struct flock lock;
+    lock.l_type = lock_type;   // F_RDLCK (read) or F_WRLCK (write)
+    lock.l_whence = SEEK_SET;
+    lock.l_start = 0;
+    lock.l_len = 0;            // entire file
+    lock.l_pid = getpid();
+
+    if (fcntl(fd, F_SETLKW, &lock) == -1) {
+        perror("fcntl lock");
+    }
+}
+
+int add_feedback(const char* username, const char *msg)
+{
+	struct feedback fb;
+	int fd=open("feedback.txt",O_CREAT|O_APPEND|O_WRONLY,0744);
+	if (fd < 0) {
+        perror("open feedback.txt");
+        return -1;
+    }
+    lock_file(fd,F_WRLCK);
+    strncpy(fb.username, username, sizeof(fb.username));
+    fb.username[sizeof(fb.username) - 1] = '\0';
+    strncpy(fb.message, msg, sizeof(fb.message));
+    fb.message[sizeof(fb.message) - 1] = '\0';
+    if (write(fd, &fb, sizeof(fb)) != sizeof(fb)) {
+        perror("write feedback");
+        close(fd);
+        return -1;
+    }
+   lock_file(fd,F_UNLCK);
+    close(fd);
+    return 1;
+
+}
+int change_password_cust(const char *username, const char *new)
+{
+	struct cust_cred c;
+        int found=0;
+	int fd=open("a.txt",O_RDWR);
+	if(fd<0)
+	{
+		perror("Open a.txt");
+		return -1;
+	}
+        lock_file(fd,F_WRLCK);
+	//search for username
+	while(read(fd,&c,sizeof(c))==sizeof(c))
+	{
+		if (strcmp(c.username, username) == 0)
+		{
+			found=1;
+			strncpy(c.password,new,sizeof(c.password));
+			c.password[sizeof(c.password)-1]='\0';
+			lseek(fd,-sizeof(c),SEEK_CUR);
+			write(fd,&c,sizeof(c));
+			lock_file(fd,F_UNLCK);
+			close(fd);
+			return 1; // password changed successfully
+		 
+		}
+	}
+	
+		       lock_file(fd,F_UNLCK);
+			close(fd);
+			return 0; // username incorrect
+}
+int apply_loan(int acc_no,double amt,const char *type)
+{
+	struct account acc;
+	struct loan ln;
+	int found=0;
+	int fd=open("account.txt",O_RDONLY);
+	if(fd<0)
+	{
+		perror("open account");
+		return -1;
+	}
+	while(read(fd,&acc,sizeof(acc))==sizeof(acc))
+	{
+		if(acc.acc_no=acc_no)
+		{
+			found=1;
+			break;
+		}
+	}
+	close(fd);
+	if(!found)
+		return 0; // account not found
+	//prepare loan record
+	int fd_l=open("loan.txt",O_CREAT|O_APPEND|O_RDWR,0744);
+	ln.acc_no=acc_no;
+	ln.amt=amt;
+	strncpy(ln.type,type,sizeof(ln.type));
+	ln.type[sizeof(ln.type)-1]='\0';
+	ln.status='P';
+	ln.id=rand()%900+100;
+	write(fd_l,&ln,sizeof(ln));
+	close(fd_l);
+	return 1; // success
+}
 
 struct session sessions[10];  // for storing details about the logged in user for releasing the lock on the file when the user logs out
 
@@ -207,6 +324,7 @@ double view_balance(int account_no)
 	  perror("open");
 	  return -1.0;
   }
+  lock_file(fd,F_RDLCK);
   lseek(fd,0,SEEK_SET);
   while(read(fd,&acc,sizeof(acc))==sizeof(acc))
   {
@@ -217,6 +335,7 @@ double view_balance(int account_no)
 		  return acc.balance;
 	  }
   }
+      lock_file(fd,F_UNLCK);
 	  close(fd);
 	  return 0.0;//not found
   
@@ -236,6 +355,7 @@ if(fd<0)
 	return -1;
 }
 lseek(fd,0,SEEK_SET);
+lock_file(fd,F_WRLCK);
 while(read(fd,&acc,sizeof(acc))==sizeof(acc))
 {
 	printf("Looking for acc_no=%d, got acc_no=%d from file\n", account_no, acc.acc_no);
@@ -252,12 +372,13 @@ while(read(fd,&acc,sizeof(acc))==sizeof(acc))
 	    tx.amt=amt;
 	    tx.timestamp=time(NULL);
 	    write(fd_t,&tx,sizeof(tx));
+	    lock_file(fd,F_UNLCK);
 	    close(fd);
 	    close(fd_t);
 	    return 1;
 	}
 }
-
+lock_file(fd,F_UNLCK);
 close(fd);
 close(fd_t);
 return 0;
@@ -277,6 +398,7 @@ if(fd<0)
         return -1;
 }
 lseek(fd,0,SEEK_SET);
+lock_file(fd,F_WRLCK);
 while(read(fd,&acc,sizeof(acc))==sizeof(acc))
 {
         printf("Looking for acc_no=%d, got acc_no=%d from file\n", account_no, acc.acc_no);
@@ -297,14 +419,14 @@ while(read(fd,&acc,sizeof(acc))==sizeof(acc))
             tx.amt=amt;
             tx.timestamp=time(NULL);
             write(fd_t,&tx,sizeof(tx));
-
+            lock_file(fd,F_UNLCK);
             close(fd);
 
             return 1;
 	    }
         }
 }
-
+lock_file(fd,F_UNLCK);
 close(fd);
 return 0;
 
@@ -326,6 +448,7 @@ int transfer(int source,int dest,double amt)
         return -1;
 }
 lseek(fd,0,SEEK_SET);
+lock_file(fd,F_WRLCK);
 //looking for source account
 	while(read(fd,&acc,sizeof(acc))==sizeof(acc))
 {
@@ -334,8 +457,10 @@ lseek(fd,0,SEEK_SET);
         if(source==acc.acc_no)
         {
                 if(acc.balance-amt<1000)
+		{ 
+			lock_file(fd,F_UNLCK);
                         return -2;
-
+		}
             else
             {
 	    //deducting amt
@@ -358,8 +483,10 @@ lseek(fd,0,SEEK_SET);
 
 }
 if(d==0)
+{
+	lock_file(fd,F_UNLCK);
 	return 0;
-
+}
 // looking for destination account
 
 lseek(fd,0,SEEK_SET);
@@ -379,13 +506,13 @@ while(read(fd,&acc,sizeof(acc))==sizeof(acc))
             tx1.amt=amt;
             tx1.timestamp=time(NULL);
             write(fd_t,&tx1,sizeof(tx));
-
+            lock_file(fd,F_UNLCK);
             close(fd);
 	    close(fd_t);
             return 1;
         }
 }
-
+lock_file(fd,F_UNLCK);
 close(fd);
 return 0;
 
@@ -417,6 +544,8 @@ int view_transaction(int acc_no, struct transaction* arr, int max) {
 
 
 int main() {
+
+     srand(time(NULL));
     int sd, nsd, sz;
     struct sockaddr_in serv, cli;
     int found;
@@ -578,6 +707,50 @@ int main() {
 			  write(nsd,"Error\n",strlen("Error\n"));
 
 	    }
+//Apply for Loan
+  if(a==5)
+  {
+     struct loan ln;
+     read(nsd,&ln,sizeof(ln));
+     int result=apply_loan(ln.acc_no,ln.amt,ln.type);
+     if(result==1)
+	     write(nsd,"Loan Application Submitted Successfully\n",sizeof("Loan Application Submitted Successfully\n"));
+     else if(result==0)
+	     write(nsd,"Account not found\n",sizeof("Account not found\n"));
+     else
+	     write(nsd,"Could not open file\n",sizeof("Could not open file\n"));
+  }
+
+//change password
+  if(a==6)
+  {
+    struct cust_cred c;
+    read(nsd,&c,sizeof(c));
+    int result=change_password_cust(c.username, c.password);
+    if(result==1)
+	    write(nsd,"Password changed successfully\n",sizeof("Password changed successfully\n"));
+    else if(result==0)
+	    write(nsd,"Incorrect username\n",sizeof("Incorrect username\n"));
+ else
+	 write(nsd,"Error opening file\n",sizeof("Error opening file\n"
+));
+  }
+
+
+// add feedback
+  if(a==7)
+  {
+	  struct feedback fb;
+    read(nsd, &fb, sizeof(fb));
+
+    int result = add_feedback(fb.username, fb.message);
+
+    if (result == 1)
+        write(nsd, "Feedback submitted successfully\n", sizeof("Feedback submitted successfully\n"));
+    else
+        write(nsd, "Error submitting feedback\n", sizeof("Error submitting feedback\n"));
+
+  }
 // View Transaction History
 	    if(a==8)
 	    {
