@@ -57,7 +57,7 @@ struct feedback{
 	char username[6];
 	char message[200];
 };
-
+//lock file
 void lock_file(int fd, int lock_type) {
     struct flock lock;
     lock.l_type = lock_type;   // F_RDLCK (read) or F_WRLCK (write)
@@ -70,7 +70,7 @@ void lock_file(int fd, int lock_type) {
         perror("fcntl lock");
     }
 }
-
+// add feedback
 int add_feedback(const char* username, const char *msg)
 {
 	struct feedback fb;
@@ -94,6 +94,7 @@ int add_feedback(const char* username, const char *msg)
     return 1;
 
 }
+//Change password for customer
 int change_password_cust(const char *username, const char *new)
 {
 	struct cust_cred c;
@@ -126,6 +127,43 @@ int change_password_cust(const char *username, const char *new)
 			close(fd);
 			return 0; // username incorrect
 }
+
+//change password for employee
+int change_password_emp(const char *username, const char *new)
+{
+        struct emp_cred c;
+        int found=0;
+        int fd=open("e.txt",O_RDWR);
+        if(fd<0)
+        {
+                perror("Open e.txt");
+                return -1;
+        }
+        lock_file(fd,F_WRLCK);
+        //search for username
+        while(read(fd,&c,sizeof(c))==sizeof(c))
+        {
+                if (strcmp(c.username, username) == 0)
+                {
+                        found=1;
+                        strncpy(c.password,new,sizeof(c.password));
+                        c.password[sizeof(c.password)-1]='\0';
+                        lseek(fd,-sizeof(c),SEEK_CUR);
+                        write(fd,&c,sizeof(c));
+                        lock_file(fd,F_UNLCK);
+                        close(fd);
+                        return 1; // password changed successfully
+
+                }
+        }
+
+                       lock_file(fd,F_UNLCK);
+                        close(fd);
+                        return 0; // username incorrect
+}
+
+
+//apply for loan
 int apply_loan(int acc_no,double amt,const char *type)
 {
 	struct account acc;
@@ -162,7 +200,7 @@ int apply_loan(int acc_no,double amt,const char *type)
 }
 
 struct session sessions[10];  // for storing details about the logged in user for releasing the lock on the file when the user logs out
-
+struct session sessions_emp[10];
 //Verify Employee Credentials
 
 int verify_emp(struct emp_cred recv_acc,int nsd)
@@ -174,6 +212,7 @@ int verify_emp(struct emp_cred recv_acc,int nsd)
             struct emp_cred temp;
 
             int found = 0;
+	    off_t offset=0;
 
             while(read(fd, &temp, sizeof(temp)) == sizeof(temp)) {
                 temp.username[5] = '\0';
@@ -184,12 +223,41 @@ int verify_emp(struct emp_cred recv_acc,int nsd)
                 if(strcmp(temp.username, recv_acc.username) == 0)
                 {
                  if( strcmp(temp.password, recv_acc.password) == 0) {
-                    found = 1;
-                    break;
+
+		    struct flock lock;
+                    lock.l_type=F_WRLCK;
+                    lock.l_whence=SEEK_SET;
+                    lock.l_start=offset;
+                    lock.l_len=sizeof(temp);
+                    lock.l_pid=getpid();
+                    if(fcntl(fd,F_SETLK,&lock)==-1)
+                            found=-2;  //already locked (user logged in)
+                    else
+		    {
+                    found=1;  // login success +session locked
+                           for(int i=0;i<10;i++)
+                           {
+                                   if(!sessions[i].active)
+                                   {
+                                   strcpy(sessions_emp[i].username,recv_acc.username);
+                                   sessions_emp[i].username[5]='\0';
+                                  // sessions[i].nsd=nsd;
+                                   sessions_emp[i].offset=offset;
+                                   sessions_emp[i].active=1;
+                                   sessions_emp[i].fd=fd;
+                                   break;
+                                   }
+                           }
+                       return found;
+
+                   
+		    }
                 }
                  else
-                 found=-1;
+                 found=-1;//wrong password
+	         break;
             }
+             offset=offset+sizeof(temp);
             }
             return found;
             close(fd);
@@ -282,7 +350,7 @@ void signup_cust(struct cust_cred recv_acc, int nsd)
                 close(fd);
 }
 
-//Logging out
+//Logging out customer
 void logout_cust(int fd,off_t offset)
 {
 	struct flock lock;
@@ -291,6 +359,18 @@ void logout_cust(int fd,off_t offset)
 	lock.l_start=offset;
 	lock.l_len=sizeof(struct cust_cred);
 	fcntl(fd,F_SETLK,&lock);
+}
+
+//logging out employee
+void logout_emp(int fd, off_t offset)
+{
+	struct flock lock;
+        lock.l_type=F_UNLCK;
+        lock.l_whence=SEEK_SET;
+        lock.l_start=offset;
+        lock.l_len=sizeof(struct cust_cred);
+        fcntl(fd,F_SETLK,&lock);
+
 }
 
 //Add Customer
@@ -346,7 +426,7 @@ int deposit_money(double amt,int account_no)
 {
 printf("amount to be deposited is %lf\n",amt);
 struct account acc;
-struct transaction tx;
+struct transaction tx={0};
 int fd=open("account.txt",O_RDWR,0744);
 int fd_t = open("transactions.txt", O_CREAT | O_APPEND | O_WRONLY, 0744);
 if(fd<0)
@@ -368,7 +448,7 @@ while(read(fd,&acc,sizeof(acc))==sizeof(acc))
 	    write(fd,&acc,sizeof(acc));
             tx.acc_no=account_no;
 	    strcpy(tx.type,"deposit");
-	    tx.type[10]='\0';
+	    //tx.type[10]='\0';
 	    tx.amt=amt;
 	    tx.timestamp=time(NULL);
 	    write(fd_t,&tx,sizeof(tx));
@@ -387,7 +467,7 @@ return 0;
 //withdraw money
 int withdraw_money(double amt,int account_no)
 {
-struct transaction tx;
+struct transaction tx={0};
 printf("amount to be deposited is %lf\n",amt);
 struct account acc;
 int fd=open("account.txt",O_RDWR,0744);
@@ -438,7 +518,8 @@ int transfer(int source,int dest,double amt)
 {
 
 	struct account acc;
-	struct transaction tx,tx1;
+	struct transaction tx={0};
+	struct transaction tx1={0};
 	int d=0;
 	int fd=open("account.txt",O_RDWR,0744);
 	int fd_t = open("transactions.txt", O_CREAT | O_APPEND | O_WRONLY, 0744);
@@ -541,6 +622,7 @@ int view_transaction(int acc_no, struct transaction* arr, int max) {
     close(fd);
     return count;   
 }
+
 
 
 int main() {
@@ -773,8 +855,7 @@ int main() {
         write(nsd, tx, n * sizeof(struct transaction));
     }
 }
-
-		    }
+}
 	    if(a==9)
 	    {
 		    //Logout Customer
@@ -785,7 +866,7 @@ int main() {
 			if(strcmp(recv_acc.username,sessions[i].username)==0)
 			{
 				fd=sessions[i].fd;
-				fd=sessions[i].offset;
+				offset=sessions[i].offset;
 				sessions[i].active=0;
 				break;
 			}
@@ -822,6 +903,11 @@ int main() {
             {
                     write(nsd, "Wrong password try again\n",strlen("Wrong password try again\n"));
             }
+	    else if(found==-2)
+            {
+                    write(nsd,"Employee already Logged in\n",strlen("Employee already Logged in\n"));
+            }
+
             else {
               signup_emp(recv_acc,nsd);
             }
@@ -838,10 +924,72 @@ int main() {
 			 struct account acc;
 			 add_customer(acc,nsd);
 			 write(nsd,"New Customer Account Added\n",strlen("New Customer Account Added\n"));
+		    
 		    }
-		 
-	    }
+//View Customer Transaction
+ if(a==6)
+  {
+
+                           
+    int acc_no;
+    if (read(nsd, &acc_no, sizeof(acc_no)) <= 0) {
+        perror("read acc_no");
+        return;
+    }
+
+    struct transaction tx[100];
+    int n = view_transaction(acc_no, tx, 100);
+
+    if (n == -1) {
+        write(nsd, "Error opening file\n", sizeof("Error opening file\n"));
+    } else if (n == 0) {
+        write(nsd, "No transaction found\n", sizeof("No transaction found\n"));
+    } else {
+
+        write(nsd, tx, n * sizeof(struct transaction));
+    }
+   
+
+  }
+//Change Password
+   if(a==7)
+   {
+	    struct emp_cred c;
+    read(nsd,&c,sizeof(c));
+    int result=change_password_emp(c.username, c.password);
+    if(result==1)
+            write(nsd,"Password changed successfully\n",sizeof("Password changed successfully\n"));
+    else if(result==0)
+            write(nsd,"Incorrect username\n",sizeof("Incorrect username\n"));
+ else
+         write(nsd,"Error opening file\n",sizeof("Error opening file\n"
+));
+
+   }
+          //Logout Employee
+		    if(a==8)
+		    {
+                     int fd;
+                    off_t offset;
+                for(int i=0;i<10;i++)
+                {
+                        if(strcmp(recv_acc.username,sessions[i].username)==0)
+                        {
+                                fd=sessions_emp[i].fd;
+                                offset=sessions_emp[i].offset;
+                                sessions_emp[i].active=0;
+                                break;
+                        }
+                }
+                 logout_emp(fd,offset);
+                 write(nsd,"Logged out successfully\n",strlen("Logged out successfully\n"));
+
             }
+
+    }
+		 
+	    
+    }
          
             //close(fd);
             // close(nsd);

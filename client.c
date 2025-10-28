@@ -403,12 +403,16 @@ if (a == 8) {
    // employee logged in. Display Employee menu
    if(ch==2)
    {
+     int flag_emp=0;
+     while(flag_emp==0)
+     {
      display_empmenu();
      int a ;
      printf("Enter your choice \n");
      fflush(stdout);
      scanf("%d",&a);
      write(sd,&a,sizeof(a)); // send choice to server
+     //Add new Customer
      if(a==1)
      {
         struct account acc;
@@ -421,14 +425,82 @@ if (a == 8) {
         acc.username[5]='\0';
         acc.active=1;
         write(sd,&acc,sizeof(acc));
-     }
+     
      //read server response
      int n = read(sd, buf_e, sizeof(buf)-1);
              if(n > 0) {
              buf_e[n] = '\0';
              printf("%s\n", buf_e);
          }
+     }
+//View Transaction history
+     if(a==6)
+     {
+          int acc_no;
+    printf("Enter account number: ");
+    scanf("%d", &acc_no);
 
+
+    write(sd, &acc_no, sizeof(acc_no));
+
+
+    struct transaction arr[50];
+    ssize_t bytes_read = read(sd, arr, sizeof(arr));
+
+
+
+    int num_records = bytes_read / sizeof(struct transaction);
+    printf("\n--- Transaction History for Account %d ---\n", acc_no);
+
+    for (int i = 0; i < num_records; i++) {
+        if(acc_no==arr[i].acc_no)
+        {
+        char *time_str = ctime(&arr[i].timestamp);
+        if (time_str) {
+            time_str[strlen(time_str) - 1] = '\0';
+        }
+
+        printf("Account: %d | Amount: %.2lf | Type: %s | Time: %s\n",
+               arr[i].acc_no, arr[i].amt, arr[i].type,
+               time_str ? time_str : "Unknown");
+    }
+
+    if (num_records == 0) {
+        printf("No transactions found or file empty.\n");
+    }
+    }
+
+    printf("-------------------------------------------\n");
+     }
+
+     if(a==7)
+     {
+        char msg[100];
+    struct cust_cred c;
+    printf("Enter username\n");
+    scanf("%s",c.username);
+    c.username[sizeof(c.username)-1]='\0';
+    printf("Enter new password\n");
+    scanf("%s",c.password);
+    c.password[sizeof(c.password)-1]='\0';
+    write(sd,&c,sizeof(c));
+    int bytes = read(sd, msg, sizeof(msg) - 1);
+    msg[bytes] = '\0';
+    printf("%s\n", msg);
+
+     }
+//Logout
+     if(a==8)
+     {
+       flag_emp=1;
+       int n = read(sd, buf_e, sizeof(buf)-1);
+             if(n > 0) {
+             buf_e[n] = '\0';
+             printf("%s\n", buf_e);
+         }
+	  
+     }
+     }
    }
    // exit(5th option ) was chosen so close connection
    if(e==1)
