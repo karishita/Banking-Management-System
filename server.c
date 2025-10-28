@@ -57,6 +57,7 @@ struct loan
 	char type[20];
 	char status;
 	int id;
+	char emp[6];
 };
 //store feedback of customer
 struct feedback{
@@ -83,7 +84,7 @@ int add_feedback(const char* username, const char *msg)
 	int fd=open("feedback.txt",O_CREAT|O_APPEND|O_WRONLY,0744);
 	if (fd < 0) {
         perror("open feedback.txt");
-        return -1;
+         return;
     }
     lock_file(fd,F_WRLCK);
     strncpy(fb.username, username, sizeof(fb.username));
@@ -173,7 +174,7 @@ int change_password_emp(const char *username, const char *new)
 int apply_loan(int acc_no,double amt,const char *type)
 {
 	struct account acc;
-	struct loan ln;
+	struct loan ln={0};
 	int found=0;
 	int fd=open("account.txt",O_RDONLY);
 	if(fd<0)
@@ -199,6 +200,7 @@ int apply_loan(int acc_no,double amt,const char *type)
 	strncpy(ln.type,type,sizeof(ln.type));
 	ln.type[sizeof(ln.type)-1]='\0';
 	ln.status='P';
+        ln.emp[0]='\0';
 	ln.id=rand()%900+100;
 	write(fd_l,&ln,sizeof(ln));
 	close(fd_l);
@@ -758,6 +760,64 @@ int change_account_status(int acc_no,int new_status)
 	return 0;// account not found
 }
 }
+//Review Feedback
+void view_feedback(int nsd)
+{
+  struct feedback fb;
+  struct feedback all[100];
+  int count=0;
+  int fd=open("feedback.txt",O_RDONLY);
+   if (fd < 0) {
+        perror("open feedback.txt");
+        return;
+    }
+while (read(fd, &fb, sizeof(fb)) == sizeof(fb)) {
+        if (count < 100)
+            all[count++] = fb;
+    }
+    close(fd);
+
+    if (count > 0)
+        write(nsd, all, count * sizeof(struct feedback));
+    else {
+        // send nothing if no feedback
+        write(nsd, all, 0);
+    }
+}
+
+//Change password for manager 
+int change_password_man(const char *username, const char *new)
+{
+        struct man_cred c;
+        int found=0;
+        int fd=open("m.txt",O_RDWR);
+        if(fd<0)
+        {
+                perror("Open m.txt");
+                return -1;
+        }
+        lock_file(fd,F_WRLCK);
+        //search for username
+        while(read(fd,&c,sizeof(c))==sizeof(c))
+        {
+                if (strcmp(c.username, username) == 0)
+                {
+                        found=1;
+                        strncpy(c.password,new,sizeof(c.password));
+                        c.password[sizeof(c.password)-1]='\0';
+                        lseek(fd,-sizeof(c),SEEK_CUR);
+                        write(fd,&c,sizeof(c));
+                        lock_file(fd,F_UNLCK);
+                        close(fd);
+                        return 1; // password changed successfully
+
+                }
+        }
+
+                       lock_file(fd,F_UNLCK);
+                        close(fd);
+                        return 0; // username incorrect
+}
 
 int main() {
 
@@ -1191,6 +1251,82 @@ int main() {
 	     else if(s==1)
 		     write(nsd,"Account status changed \n",strlen("Account status changed \n"));
 		    }
+                    //assign loan
+		    if(a==2)
+		    {
+                       struct loan ln;
+                      struct loan pending[100];  // buffer
+                       int count = 0;
+		       int fd = open("loan.txt", O_RDONLY);
+                       if (fd < 0) {
+                       perror("open loan.txt");
+                       return -1;
+
+                     }
+		       while (read(fd, &ln, sizeof(ln)) == sizeof(ln)) {
+                      if (ln.emp[0] == '\0') {
+                      pending[count++] = ln;
+        }
+    }
+    close(fd);
+                  //sending pending loan to client
+                    write(nsd, pending, count * sizeof(struct loan));
+                  // Receive manager’s selection (loan_id + emp)
+                   struct assign_req {
+                    int loan_id;
+                     char emp[6];
+                     } req;
+
+    if (read(nsd, &req, sizeof(req)) <= 0) {
+        perror("read assign request");
+        return;
+    }
+    //  Update the selected loan
+    int success = 0;
+    fd = open("loan.txt", O_RDWR);
+    if (fd < 0) {
+        perror("open for update");
+        write(nsd, &success, sizeof(success));
+        return -1;
+    }
+
+    while (read(fd, &ln, sizeof(ln)) == sizeof(ln)) {
+        if (ln.id == req.loan_id) {
+                strncpy(ln.emp, req.emp, sizeof(ln.emp) - 1);
+                ln.emp[sizeof(ln.emp) - 1] = '\0';
+                lseek(fd, -sizeof(ln), SEEK_CUR);
+                write(fd, &ln, sizeof(ln));
+                success = 1;
+           
+            break;
+        }
+    }
+
+    close(fd);
+
+    // Send result back to client
+    write(nsd, &success, sizeof(success));
+}
+      if(a==3)
+{
+	view_feedback(nsd);
+}
+ 
+if(a==4)
+{
+	struct man_cred c;
+    read(nsd,&c,sizeof(c));
+    int result=change_password_man(c.username, c.password);
+    if(result==1)
+            write(nsd,"Password changed successfully\n",sizeof("Password changed successfully\n"));
+    else if(result==0)
+            write(nsd,"Incorrect username\n",sizeof("Incorrect username\n"));
+ else
+         write(nsd,"Error opening file\n",sizeof("Error opening file\n"
+));
+
+}
+		    
 		    //Logout Manager
 		    if(a==5)
 		    {

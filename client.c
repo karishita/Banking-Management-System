@@ -47,6 +47,7 @@ struct loan
         char type[20];
         char status;
 	int id;
+	char emp[6];
 };
 
 struct feedback{
@@ -514,7 +515,7 @@ if (a == 8) {
 
     printf("-------------------------------------------\n");
      }
-
+//change password
      if(a==7)
      {
         char msg[100];
@@ -555,6 +556,95 @@ if(ch==3)
            fflush(stdout);
            scanf("%d",&a);
            write(sd,&a,sizeof(a)); // send choice to server
+	//assign loan to employees
+	if(a==2)
+	{
+	  struct loan loans[100];
+          ssize_t byte=read(sd,loans,sizeof(loans));
+	  int count=byte/sizeof(struct loan);
+	  if (count == 0) 
+        printf("No pending or unassigned loans.\n");
+        
+	 printf("\n--- Pending / Unassigned Loans ---\n");
+         printf("ID\tAccount\tAmount\tType\t\tStatus\tEmployee\n");
+         printf("----------------------------------------------------\n");
+
+    for (int i = 0; i < count; i++) {
+        printf("%d\t%d\t%.2lf\t%-10s\t%c\t%s\n",
+               loans[i].id, loans[i].acc_no, loans[i].amt,
+               loans[i].type, loans[i].status,
+               loans[i].emp[0] ? loans[i].emp : "NONE");
+    }
+
+    printf("----------------------------------------------------\n");
+    // Now manager assigns a loan
+    int loan_id;
+    char emp[6];
+
+    printf("Enter Loan ID to assign : ");
+    scanf("%d", &loan_id);
+    printf("Enter Employee username (max 5 chars): ");
+    scanf("%5s", emp);
+
+    struct assign_req {
+        int loan_id;
+        char emp[6];
+    } req;
+
+    req.loan_id = loan_id;
+    strncpy(req.emp, emp, sizeof(req.emp) - 1);
+    req.emp[sizeof(req.emp) - 1] = '\0';
+
+    write(sd, &req, sizeof(req));
+
+    int success;
+    read(sd, &success, sizeof(success));
+    if (success == 1)
+        printf(" Loan %d assigned to %s successfully.\n", loan_id, emp);
+    else
+        printf(" Failed to assign loan %d (already assigned or not found).\n", loan_id);
+	}
+
+	if(a==3)
+	{
+		struct feedback fb[100];
+    ssize_t bytes_read = read(sd, fb, sizeof(fb));
+
+    if (bytes_read <= 0) {
+        printf("No feedbacks received.\n");
+        return;
+    }
+
+    int count = bytes_read / sizeof(struct feedback);
+    if (count == 0) {
+        printf("No feedback messages available.\n");
+        return;
+    }
+
+    printf("\n--- Customer Feedback ---\n");
+    printf("-----------------------------------------------\n");
+    for (int i = 0; i < count; i++) {
+        printf("From: %-6s | Message: %s\n", fb[i].username, fb[i].message);
+    }
+    printf("-----------------------------------------------\n");
+	}
+
+	if(a==4)
+	{
+              char msg[100];
+    struct man_cred c;
+    printf("Enter username\n");
+    scanf("%s",c.username);
+    c.username[sizeof(c.username)-1]='\0';
+    printf("Enter new password\n");
+    scanf("%s",c.password);
+    c.password[sizeof(c.password)-1]='\0';
+    write(sd,&c,sizeof(c));
+    int bytes = read(sd, msg, sizeof(msg) - 1);
+    msg[bytes] = '\0';
+    printf("%s\n", msg);
+
+	}
            //Logout manager 
            if(a==5)
 	   {
