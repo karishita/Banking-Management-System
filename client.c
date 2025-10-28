@@ -7,6 +7,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include<time.h>
+
 struct transaction
 {
         int acc_no;
@@ -32,6 +33,11 @@ struct cust_cred {
 struct emp_cred{
 	char username[6];
 	char password[6];
+};
+struct man_cred
+{
+        char username[6];
+        char password[6];
 };
 
 struct loan
@@ -75,6 +81,16 @@ void display_empmenu()
 	printf("7. Change Password\n");
 	printf("8. Logout\n");
 	printf("9. Exit\n");
+}
+void display_manmenu()
+{
+	printf("Welcome\n");
+	printf("1. Activate/Deactivate Customer Account\n");
+	printf("2.Assign Loan Application process to employee\n");
+	printf("3.Review Customer Feedback\n");
+	printf("4.Change password\n");
+	printf("5.Logout\n");
+	printf("6.Exit\n");
 }
 int main() {
     int sd;
@@ -168,6 +184,32 @@ int main() {
     }
    }
 
+   if(ch==3)
+   {
+     struct man_cred acc = {0};
+    printf("Enter manager  username: ");
+    scanf("%5s", acc.username);
+    printf("Enter manager  password: ");
+    scanf("%5s", acc.password);
+
+    acc.username[5] = '\0';
+    acc.password[5] = '\0';
+
+    // send struct
+    if(write(sd, &acc, sizeof(acc)) != sizeof(acc)) {
+        perror("write failed");
+        close(sd);
+        exit(1);
+    }
+
+    // read server response
+    int n = read(sd, buf, sizeof(buf)-1);
+    if(n > 0) {
+        buf[n] = '\0';
+        printf("%s\n", buf);
+    }
+    
+   }
     if(strcmp(buf,"Login successful\n")==0) // login successful so dont need to show the login menu again 
     flag_login=1;
     }
@@ -502,6 +544,53 @@ if (a == 8) {
      }
      }
    }
+if(ch==3)
+{
+	int flag_man=0;
+	while(flag_man==0)
+	{
+          display_manmenu();
+	   int a ;
+           printf("Enter your choice \n");
+           fflush(stdout);
+           scanf("%d",&a);
+           write(sd,&a,sizeof(a)); // send choice to server
+           //Logout manager 
+           if(a==5)
+	   {
+              flag_man=1;
+	      int n = read(sd, buf_e, sizeof(buf)-1);
+             if(n > 0) {
+             buf_e[n] = '\0';
+             printf("%s\n", buf_e);
+         }
+
+	   }
+     //Activate/ deactivate customer account
+	  if(a==1)
+	  {
+           struct account_status_update {
+        int acc_no;
+        int new_status;   // 1 -> Activate, 0 -> Deactivate
+        } req;
+
+       // Fill the structure
+       printf("Enter Account Number: ");
+       scanf("%d", &req.acc_no);
+       printf("Enter 1 to Activate, 0 to Deactivate: ");
+       scanf("%d", &req.new_status);
+
+       // Send entire structure in one write
+       write(sd, &req, sizeof(req));
+       char msg[100];
+       int bytes = read(sd, msg, sizeof(msg) - 1);
+       msg[bytes] = '\0';
+       printf("%s\n", msg);
+	  } 
+
+	}
+
+}
    // exit(5th option ) was chosen so close connection
    if(e==1)
     {

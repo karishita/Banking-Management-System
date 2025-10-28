@@ -17,6 +17,12 @@ struct emp_cred{
         char username[6];
         char password[6];
 };
+//structure to store details of manager username and password
+struct man_cred
+{
+	char username[6];
+	char password[6];
+};
 //structure to store details of an active session
 struct session
 {
@@ -201,6 +207,7 @@ int apply_loan(int acc_no,double amt,const char *type)
 
 struct session sessions[10];  // for storing details about the logged in user for releasing the lock on the file when the user logs out
 struct session sessions_emp[10];
+struct session sessions_man[10];
 //Verify Employee Credentials
 
 int verify_emp(struct emp_cred recv_acc,int nsd)
@@ -237,7 +244,7 @@ int verify_emp(struct emp_cred recv_acc,int nsd)
                     found=1;  // login success +session locked
                            for(int i=0;i<10;i++)
                            {
-                                   if(!sessions[i].active)
+                                   if(!sessions_emp[i].active)
                                    {
                                    strcpy(sessions_emp[i].username,recv_acc.username);
                                    sessions_emp[i].username[5]='\0';
@@ -435,6 +442,7 @@ if(fd<0)
 	return -1;
 }
 lseek(fd,0,SEEK_SET);
+
 lock_file(fd,F_WRLCK);
 while(read(fd,&acc,sizeof(acc))==sizeof(acc))
 {
@@ -442,7 +450,14 @@ while(read(fd,&acc,sizeof(acc))==sizeof(acc))
 
 	if(account_no==acc.acc_no)
 	{
-	    
+
+	    if(acc.active==0)
+	    {
+		   lock_file(fd,F_UNLCK);
+		   close(fd);
+		   close(fd_t);
+		   return -3;
+	    }
             acc.balance=acc.balance+amt;
 	    lseek(fd,-sizeof(acc),SEEK_CUR);
 	    write(fd,&acc,sizeof(acc));
@@ -485,8 +500,19 @@ while(read(fd,&acc,sizeof(acc))==sizeof(acc))
 
         if(account_no==acc.acc_no)
         {
+		 if(acc.active==0)
+            {
+                   lock_file(fd,F_UNLCK);
+                   close(fd);
+                   close(fd_t);
+                   return -3;
+            }
+
 		if(acc.balance-amt<1000)
-			return -2;
+		{
+                lock_file(fd,F_UNLCK);
+		return -2;
+		}
 	
             else
 	    {
@@ -537,6 +563,14 @@ lock_file(fd,F_WRLCK);
 
         if(source==acc.acc_no)
         {
+		 if(acc.active==0)
+            {
+                   lock_file(fd,F_UNLCK);
+                   close(fd);
+                   close(fd_t);
+                   return -3;
+            }
+
                 if(acc.balance-amt<1000)
 		{ 
 			lock_file(fd,F_UNLCK);
@@ -577,6 +611,14 @@ while(read(fd,&acc,sizeof(acc))==sizeof(acc))
 
         if(dest==acc.acc_no)
         {
+		 if(acc.active==0)
+            {
+                   lock_file(fd,F_UNLCK);
+                   close(fd);
+                   close(fd_t);
+                   return -3;
+            }
+
 
             acc.balance=acc.balance+amt;
             lseek(fd,-sizeof(acc),SEEK_CUR);
@@ -623,7 +665,99 @@ int view_transaction(int acc_no, struct transaction* arr, int max) {
     return count;   
 }
 
+//verify manager credential
+int verify_man(struct man_cred recv_acc,int nsd)
+{
+        int fd = open("m.txt", O_CREAT | O_RDWR, 0744);
+            if(fd < 0) { perror("file open"); close(nsd); exit(1); }
 
+            lseek(fd, 0, SEEK_SET);
+            struct man_cred temp;
+
+            int found = 0;
+            off_t offset=0;
+
+            while(read(fd, &temp, sizeof(temp)) == sizeof(temp)) {
+                temp.username[5] = '\0';
+                temp.password[5] = '\0';
+                temp.username[strcspn(temp.username, "\0")] = '\0';
+                temp.password[strcspn(temp.password, "\0")] = '\0';
+
+                if(strcmp(temp.username, recv_acc.username) == 0)
+                {
+                 if( strcmp(temp.password, recv_acc.password) == 0) {
+
+                    struct flock lock;
+                    lock.l_type=F_WRLCK;
+                    lock.l_whence=SEEK_SET;
+                    lock.l_start=offset;
+                    lock.l_len=sizeof(temp);
+                    lock.l_pid=getpid();
+                    if(fcntl(fd,F_SETLK,&lock)==-1)
+                            found=-2;  //already locked (user logged in)
+                    else
+                    {
+                    found=1;  // login success +session locked
+                           for(int i=0;i<10;i++)
+                           {
+                                   if(!sessions_man[i].active)
+                                   {
+                                   strcpy(sessions_man[i].username,recv_acc.username);
+                                   sessions_man[i].username[5]='\0';
+                                  // sessions[i].nsd=nsd;
+                                   sessions_man[i].offset=offset;
+                                   sessions_man[i].active=1;
+                                   sessions_man[i].fd=fd;
+                                   break;
+                                   }
+                           }
+                       return found;
+
+
+                    }
+                }
+                 else
+                 found=-1;//wrong password
+                 break;
+            }
+             offset=offset+sizeof(temp);
+            }
+            return found;
+            close(fd);
+}
+//Signup for manager 
+void signup_man(struct man_cred recv_acc, int nsd)
+{
+                int fd= open("m.txt", O_CREAT | O_RDWR, 0744);
+                lseek(fd, 0, SEEK_END);
+                write(fd, &recv_acc, sizeof(recv_acc));
+                write(nsd, "Sign Up successful\n", 19);
+                close(fd);
+}
+
+//Activate/ deactivate customer account
+int change_account_status(int acc_no,int new_status)
+{
+	struct account acc;
+	int fd = open("account.txt", O_RDWR, 0744);
+        if (fd < 0) {
+        perror("open account file");
+        return -1;
+    }
+	lock_file(fd,F_WRLCK);
+	while (read(fd, &acc, sizeof(acc)) == sizeof(acc)) {
+        if (acc.acc_no == acc_no) {
+            acc.active = new_status;
+            lseek(fd, -sizeof(acc), SEEK_CUR);
+            write(fd, &acc, sizeof(acc));
+	    close(fd);
+	    return 1;// successfully changed
+	}
+	lock_file(fd,F_UNLCK);
+	close(fd);
+	return 0;// account not found
+}
+}
 
 int main() {
 
@@ -735,6 +869,8 @@ int main() {
 			    write(nsd,"Amount deposited\n",strlen("Amount deposited\n"));
 		    else if(status==0)
 			    write(nsd,"No account found\n",strlen("No account found\n"));
+		    else if(status==-3)
+                          write(nsd,"Your account is deactivated\n",strlen("Your account is deactivated\n"));
 		    else
 			    write(nsd,"Error!",strlen("Error!"));
 
@@ -761,6 +897,9 @@ int main() {
                             write(nsd,"No account found\n",strlen("No account found\n"));
 		    else if(status==-2)
 			    write(nsd,"Insufficient fund!cant withdraw\n",strlen("Insufficient fund!cant withdraw\n"));
+		    else if(status==-3)
+                          write(nsd,"Your account is deactivated\n",strlen("Your account is deactivated\n"));
+
                     else
                             write(nsd,"Error!",strlen("Error!"));
 
@@ -785,6 +924,9 @@ int main() {
 			  write(nsd,"No account found\n",strlen("No account found\n"));
 		  else if(status==-2)
 			  write(nsd,"Insufficient fund\n",strlen("Insufficient fund\n"));
+		  else if(status==-3)
+                          write(nsd,"Your account is deactivated\n",strlen("Your account is deactivated\n"));
+
 		  else
 			  write(nsd,"Error\n",strlen("Error\n"));
 
@@ -973,7 +1115,7 @@ int main() {
                     off_t offset;
                 for(int i=0;i<10;i++)
                 {
-                        if(strcmp(recv_acc.username,sessions[i].username)==0)
+                        if(strcmp(recv_acc.username,sessions_emp[i].username)==0)
                         {
                                 fd=sessions_emp[i].fd;
                                 offset=sessions_emp[i].offset;
@@ -984,12 +1126,93 @@ int main() {
                  logout_emp(fd,offset);
                  write(nsd,"Logged out successfully\n",strlen("Logged out successfully\n"));
 
-            }
+		    }            
 
-    }
-		 
+    
+	    }		 
 	    
     }
+
+   if(ch==3)
+{
+  
+	struct man_cred recv_acc = {0};
+
+
+            if(read(nsd, &recv_acc, sizeof(recv_acc)) != sizeof(recv_acc)) {
+                perror("read failed");
+                close(nsd);
+                exit(1);
+            }
+
+            // Ensure null-termination
+            recv_acc.username[5] = '\0';
+            recv_acc.password[5] = '\0';
+            int found=verify_man(recv_acc,nsd);
+
+            if(found==1)
+            {
+                write(nsd, "Login successful\n", 17);
+            }
+            else if(found==-1)
+            {
+                    write(nsd, "Wrong password try again\n",strlen("Wrong password try again\n"));
+            }
+            else if(found==-2)
+            {
+                    write(nsd,"Employee already Logged in\n",strlen("Employee already Logged in\n"));
+            }
+                       else {
+              signup_man(recv_acc,nsd);
+            }
+      if(found==1)
+            {
+
+                    int a ;
+                    read(nsd,&a,sizeof(a));
+		    //Activate/ Deactivate customer account
+		    if(a==1)
+		    {
+                         struct account_status_update {
+                          int acc_no;
+                          int new_status;
+                        } req;
+
+                  // Read the structure
+                if (read(nsd, &req, sizeof(req)) <= 0) {
+                 perror("read account_status_update");
+                 return;
+               }
+
+              
+             int s= change_account_status(req.acc_no, req.new_status);
+	     if(s==0)
+		     write(nsd,"Account not found\n",strlen("Account not found\n"));
+	     else if(s==1)
+		     write(nsd,"Account status changed \n",strlen("Account status changed \n"));
+		    }
+		    //Logout Manager
+		    if(a==5)
+		    {
+                          int fd;
+                    off_t offset;
+                for(int i=0;i<10;i++)
+                {
+                        if(strcmp(recv_acc.username,sessions_man[i].username)==0)
+                        {
+                                fd=sessions_man[i].fd;
+                                offset=sessions_man[i].offset;
+                                sessions_man[i].active=0;
+                                break;
+                        }
+                }
+                 logout_emp(fd,offset);
+                 write(nsd,"Logged out successfully\n",strlen("Logged out successfully\n"));
+
+  
+		    }
+	    }
+}
          
             //close(fd);
             // close(nsd);
