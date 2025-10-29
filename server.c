@@ -23,6 +23,13 @@ struct man_cred
 	char username[6];
 	char password[6];
 };
+
+struct admin_cred
+{
+        char username[6];
+        char password[6];
+};
+
 //structure to store details of an active session
 struct session
 {
@@ -210,6 +217,7 @@ int apply_loan(int acc_no,double amt,const char *type)
 struct session sessions[10];  // for storing details about the logged in user for releasing the lock on the file when the user logs out
 struct session sessions_emp[10];
 struct session sessions_man[10];
+struct session sessions_admin[10];
 //Verify Employee Credentials
 
 int verify_emp(struct emp_cred recv_acc,int nsd)
@@ -377,7 +385,7 @@ void logout_emp(int fd, off_t offset)
         lock.l_type=F_UNLCK;
         lock.l_whence=SEEK_SET;
         lock.l_start=offset;
-        lock.l_len=sizeof(struct cust_cred);
+        lock.l_len=sizeof(struct emp_cred);
         fcntl(fd,F_SETLK,&lock);
 
 }
@@ -819,6 +827,91 @@ int change_password_man(const char *username, const char *new)
                         return 0; // username incorrect
 }
 
+//verify admin credential
+int verify_admin(struct admin_cred recv_acc,int nsd)
+{
+        int fd = open("ad.txt", O_CREAT | O_RDWR, 0744);
+            if(fd < 0) { perror("file open"); close(nsd); exit(1); }
+
+            lseek(fd, 0, SEEK_SET);
+            struct emp_cred temp;
+
+            int found = 0;
+	    off_t offset=0;
+
+            while(read(fd, &temp, sizeof(temp)) == sizeof(temp)) {
+                temp.username[5] = '\0';
+                temp.password[5] = '\0';
+                temp.username[strcspn(temp.username, "\0")] = '\0';
+                temp.password[strcspn(temp.password, "\0")] = '\0';
+
+                if(strcmp(temp.username, recv_acc.username) == 0)
+                {
+                 if( strcmp(temp.password, recv_acc.password) == 0) {
+
+		    struct flock lock;
+                    lock.l_type=F_WRLCK;
+                    lock.l_whence=SEEK_SET;
+                    lock.l_start=offset;
+                    lock.l_len=sizeof(temp);
+                    lock.l_pid=getpid();
+                    if(fcntl(fd,F_SETLK,&lock)==-1)
+                            found=-2;  //already locked (user logged in)
+                    else
+		    {
+                    found=1;  // login success +session locked
+                           for(int i=0;i<10;i++)
+                           {
+                                   if(!sessions_admin[i].active)
+                                   {
+                                   strcpy(sessions_admin[i].username,recv_acc.username);
+                                   sessions_admin[i].username[5]='\0';
+                                  // sessions[i].nsd=nsd;
+                                   sessions_admin[i].offset=offset;
+                                   sessions_admin[i].active=1;
+                                   sessions_admin[i].fd=fd;
+                                   break;
+                                   }
+                           }
+                       return found;
+
+                   
+		    }
+                }
+                 else
+                 found=-1;//wrong password
+	         break;
+            }
+             offset=offset+sizeof(temp);
+            }
+            return found;
+            close(fd);
+
+
+}
+
+//signup for admin
+void signup_admin(struct admin_cred recv_acc, int nsd)
+{
+                int fd= open("ad.txt", O_CREAT | O_RDWR, 0744);
+                lseek(fd, 0, SEEK_END);
+                write(fd, &recv_acc, sizeof(recv_acc));
+                write(nsd, "Sign Up successful\n", 19);
+                close(fd);
+}
+//logout admin
+void logout_admin(int fd, off_t offset)
+{
+        struct flock lock;
+        lock.l_type=F_UNLCK;
+        lock.l_whence=SEEK_SET;
+        lock.l_start=offset;
+        lock.l_len=sizeof(struct admin_cred);
+        fcntl(fd,F_SETLK,&lock);
+
+}
+
+
 int main() {
 
      srand(time(NULL));
@@ -1111,7 +1204,7 @@ int main() {
             }
 
             else {
-              signup_emp(recv_acc,nsd);
+              write(nsd,"No such Employee exists\n",strlen("No such Employee exists\n"));
             }
 	    
 	    if(found==1)
@@ -1223,7 +1316,7 @@ int main() {
                     write(nsd,"Employee already Logged in\n",strlen("Employee already Logged in\n"));
             }
                        else {
-              signup_man(recv_acc,nsd);
+              write(nsd,"Manager not found\n",strlen("Manager not found\n"));
             }
       if(found==1)
             {
@@ -1348,6 +1441,104 @@ if(a==4)
   
 		    }
 	    }
+}
+
+if(ch==4)
+{
+
+	struct admin_cred recv_acc = {0};
+
+
+            if(read(nsd, &recv_acc, sizeof(recv_acc)) != sizeof(recv_acc)) {
+                perror("read failed");
+                close(nsd);
+                exit(1);
+            }
+
+            // Ensure null-termination
+            recv_acc.username[5] = '\0';
+            recv_acc.password[5] = '\0';
+            int found=verify_admin(recv_acc,nsd);
+
+            if(found==1)
+            {
+                write(nsd, "Login successful\n", 17);
+            }
+            else if(found==-1)
+            {
+                    write(nsd, "Wrong password try again\n",strlen("Wrong password try again\n"));
+            }
+            else if(found==-2)
+            {
+                    write(nsd,"Employee already Logged in\n",strlen("Employee already Logged in\n"));
+            }
+                       else {
+              signup_admin(recv_acc,nsd);
+		       }
+             if(found==1)
+            {
+
+                    int a ;
+                    read(nsd,&a,sizeof(a));
+		    //Add new Employee
+		    if(a==1)
+		    {
+			    int c;
+			    read(nsd,&c,sizeof(c));
+			    //Add new Employee
+			    if(c==1)
+			    {
+		            struct emp_cred recv_acc = {0};
+                            if(read(nsd, &recv_acc, sizeof(recv_acc)) != sizeof(recv_acc)) {
+                            perror("read failed");
+                            close(nsd);
+                             exit(1);
+                            }
+
+            // Ensure null-termination
+                       recv_acc.username[5] = '\0';
+                       recv_acc.password[5] = '\0';
+		        signup_emp(recv_acc,nsd);
+			    }
+                          //Add new manager 
+			    else
+			    {
+			    struct man_cred recv_acc = {0};
+                            if(read(nsd, &recv_acc, sizeof(recv_acc)) != sizeof(recv_acc)) {
+                            perror("read failed");
+                            close(nsd);
+                             exit(1);
+                            }
+
+            // Ensure null-termination
+                       recv_acc.username[5] = '\0';
+                       recv_acc.password[5] = '\0'; 
+		        signup_man(recv_acc,nsd);
+			    }
+		    }
+		    //Logout Administrator
+		    if(a==5)
+		    {
+                           int fd;
+                    off_t offset;
+                for(int i=0;i<10;i++)
+                {
+                        if(strcmp(recv_acc.username,sessions_admin[i].username)==0)
+                        {
+                                fd=sessions_admin[i].fd;
+                                offset=sessions_admin[i].offset;
+                                sessions_admin[i].active=0;
+                                break;
+                        }
+                }
+                 logout_admin(fd,offset);
+                 write(nsd,"Logged out successfully\n",strlen("Logged out successfully\n"));
+
+		    }
+	    }
+          
+	
+
 }
          
             //close(fd);

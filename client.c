@@ -40,6 +40,12 @@ struct man_cred
         char password[6];
 };
 
+struct admin_cred
+{
+	char username[6];
+	char password[6];
+};
+
 struct loan
 {
         int acc_no;
@@ -92,6 +98,17 @@ void display_manmenu()
 	printf("4.Change password\n");
 	printf("5.Logout\n");
 	printf("6.Exit\n");
+}
+
+void display_adminmenu()
+{
+	printf("1.Add new Bank Employee\n");
+	printf("2.Modify Employee details\n");
+	printf("3.Manage user roles\n");
+	printf("4.Change Password\n");
+	printf("5.Logout\n");
+	printf("6.Exit\n");
+
 }
 int main() {
     int sd;
@@ -210,6 +227,33 @@ int main() {
         printf("%s\n", buf);
     }
     
+   }
+
+   if(ch==4)
+   {
+     struct admin_cred acc = {0};
+    printf("Enter administrator  username: ");
+    scanf("%5s", acc.username);
+    printf("Enter administrator  password: ");
+    scanf("%5s", acc.password);
+
+    acc.username[5] = '\0';
+    acc.password[5] = '\0';
+
+    // send struct
+    if(write(sd, &acc, sizeof(acc)) != sizeof(acc)) {
+        perror("write failed");
+        close(sd);
+        exit(1);
+    }
+
+    // read server response
+    int n = read(sd, buf, sizeof(buf)-1);
+    if(n > 0) {
+        buf[n] = '\0';
+        printf("%s\n", buf);
+    }
+
    }
     if(strcmp(buf,"Login successful\n")==0) // login successful so dont need to show the login menu again 
     flag_login=1;
@@ -680,6 +724,94 @@ if(ch==3)
 
 	}
 
+}
+if(ch==4)
+{
+  int flag_admin=0;
+  while(flag_admin==0)
+  {
+	    display_adminmenu();
+            int a ;
+           printf("Enter your choice \n");
+           fflush(stdout);
+           scanf("%d",&a);
+           write(sd,&a,sizeof(a));// send choice to server
+	//add new employee
+	if(a==1)
+	{
+		int c;
+		printf("1.add employee\n");
+		printf("2.add manager\n");
+                printf("Enter your choice\n");
+		fflush(stdout);
+		scanf("%d",&c);
+		write(sd,&c,sizeof(c));
+		if(c==1)
+	{
+		struct emp_cred acc = {0};
+    printf("Enter employee  username: ");
+    scanf("%5s", acc.username);
+    printf("Enter employee  password: ");
+    scanf("%5s", acc.password);
+
+    acc.username[5] = '\0';
+    acc.password[5] = '\0';
+
+    // send struct
+    if(write(sd, &acc, sizeof(acc)) != sizeof(acc)) {
+        perror("write failed");
+        close(sd);
+        exit(1);
+    }
+
+    // read server response
+    int n = read(sd, buf, sizeof(buf)-1);
+    if(n > 0) {
+        buf[n] = '\0';
+        printf("%s\n", buf);
+    }
+
+	}
+		else
+	        {
+   struct man_cred acc = {0};
+    printf("Enter manager  username: ");
+    scanf("%5s", acc.username);
+    printf("Enter manager  password: ");
+    scanf("%5s", acc.password);
+
+    acc.username[5] = '\0';
+    acc.password[5] = '\0';
+
+    // send struct
+    if(write(sd, &acc, sizeof(acc)) != sizeof(acc)) {
+        perror("write failed");
+        close(sd);
+        exit(1);
+    }
+
+    // read server response
+    int n = read(sd, buf, sizeof(buf)-1);
+    if(n > 0) {
+        buf[n] = '\0';
+        printf("%s\n", buf);
+    }
+
+		}
+
+	}
+	//logout
+	   if(a==5)
+	   {
+              flag_admin=1;
+              int n = read(sd, buf_e, sizeof(buf)-1);
+             if(n > 0) {
+             buf_e[n] = '\0';
+             printf("%s\n", buf_e);
+
+ 	   }
+	   }
+  }
 }
    // exit(5th option ) was chosen so close connection
    if(e==1)
