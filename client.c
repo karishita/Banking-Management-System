@@ -80,14 +80,12 @@ void display_empmenu()
 {
 	printf("Welcome\n");
 	printf("1.Add new customer\n");
-	printf("2.Modify customer details\n");
-	printf("3.Process Loan Applications\n");
-	printf("4.Approve/Reject Loans\n");
-	printf("5.View Assigned Loan applications\n");
-	printf("6.View Customer Transactions\n");
-	printf("7. Change Password\n");
-	printf("8. Logout\n");
-	printf("9. Exit\n");
+	printf("2.Approve/Reject Loans\n");
+	printf("3.View Assigned Loan applications\n");
+	printf("4.View Customer Transactions\n");
+	printf("5. Change Password\n");
+	printf("6. Logout\n");
+	printf("7. Exit\n");
 }
 void display_manmenu()
 {
@@ -103,11 +101,11 @@ void display_manmenu()
 void display_adminmenu()
 {
 	printf("1.Add new Bank Employee\n");
-	printf("2.Modify Employee details\n");
-	printf("3.Manage user roles\n");
-	printf("4.Change Password\n");
-	printf("5.Logout\n");
-	printf("6.Exit\n");
+//	printf("2.Modify Employee details\n");
+//	printf("3.Manage user roles\n");
+	printf("2.Change Password\n");
+	printf("3.Logout\n");
+	printf("4.Exit\n");
 
 }
 int main() {
@@ -483,7 +481,13 @@ if (a == 8) {
              buf_c[n] = '\0';
              printf("%s\n", buf_c);
 	  }
-	  }	     
+ 	  }
+//Exit
+    if(a==10)
+{
+close(sd);
+exit(0);
+}
 	   
      }
    }
@@ -520,8 +524,67 @@ if (a == 8) {
              printf("%s\n", buf_e);
          }
      }
+     //Approve/Reject Loans
+     if(a==2)
+     {
+        int loan_id;
+       char status;
+
+    printf("Enter Loan ID to assign : ");
+    scanf("%d", &loan_id);
+    while (getchar() != '\n');
+    printf("A.Accept R.Reject ");
+    scanf("%c", &status);
+
+    struct assign_req {
+        int loan_id;
+        char status;
+    } req;
+
+    req.loan_id = loan_id;
+    req.status=status;
+    //req.emp[sizeof(req.emp) - 1] = '\0';
+
+    write(sd, &req, sizeof(req));
+
+    int success;
+    read(sd, &success, sizeof(success));
+    if (success == 1)
+        printf(" Loan status changed to %c\n",status);
+    else
+        printf(" Failed \n");
+
+     }
+//View Assigned Loans
+     if(a==3)
+     {
+         struct loan loans[100];
+	 char emp[6];
+	 printf("Enter Employee id\n");
+         scanf("%s",emp);
+	 emp[6]='\0';
+          ssize_t byte=read(sd,loans,sizeof(loans));
+          int count=byte/sizeof(struct loan);
+         // if (count == 0)
+       // printf("No pending or unassigned loans.\n");
+
+         printf("\n--- Assigned Loans ---\n");
+         printf("ID\tAccount\tAmount\tType\t\tStatus\tEmployee\n");
+         printf("----------------------------------------------------\n");
+
+    for (int i = 0; i < count; i++) {
+	    if(strcmp(emp,loans[i].emp)==0)
+        printf("%d\t%d\t%.2lf\t%-10s\t%c\t%s\n",
+               loans[i].id, loans[i].acc_no, loans[i].amt,
+               loans[i].type, loans[i].status,
+               loans[i].emp);
+    }
+
+    printf("----------------------------------------------------\n");
+
+     }
 //View Transaction history
-     if(a==6)
+     if(a==4)
      {
           int acc_no;
     printf("Enter account number: ");
@@ -560,7 +623,7 @@ if (a == 8) {
     printf("-------------------------------------------\n");
      }
 //change password
-     if(a==7)
+     if(a==5)
      {
         char msg[100];
     struct cust_cred c;
@@ -577,7 +640,7 @@ if (a == 8) {
 
      }
 //Logout
-     if(a==8)
+     if(a==6)
      {
        flag_emp=1;
        int n = read(sd, buf_e, sizeof(buf)-1);
@@ -586,6 +649,12 @@ if (a == 8) {
              printf("%s\n", buf_e);
          }
 	  
+     }
+     //exit
+     if(a==7)
+     {
+	     close(sd);
+	     exit(0);
      }
      }
    }
@@ -700,6 +769,11 @@ if(ch==3)
          }
 
 	   }
+	   if(a==6)
+	   {
+		   close(sd);
+		   exit(0);
+	   }
      //Activate/ deactivate customer account
 	  if(a==1)
 	  {
@@ -800,8 +874,26 @@ if(ch==4)
 		}
 
 	}
+	//change password
+	if(a==2)
+	{
+		char msg[100];
+    struct cust_cred c;
+    printf("Enter username\n");
+    scanf("%s",c.username);
+    c.username[sizeof(c.username)-1]='\0';
+    printf("Enter new password\n");
+    scanf("%s",c.password);
+    c.password[sizeof(c.password)-1]='\0';
+    write(sd,&c,sizeof(c));
+    int bytes = read(sd, msg, sizeof(msg) - 1);
+    msg[bytes] = '\0';
+    printf("%s\n", msg);
+
+
+	}
 	//logout
-	   if(a==5)
+	   if(a==3)
 	   {
               flag_admin=1;
               int n = read(sd, buf_e, sizeof(buf)-1);
@@ -809,7 +901,13 @@ if(ch==4)
              buf_e[n] = '\0';
              printf("%s\n", buf_e);
 
- 	   }
+      	   }
+	   }
+	   //exit
+	   if(a==4)
+	   {
+		   close(sd);
+		   exit(0);
 	   }
   }
 }

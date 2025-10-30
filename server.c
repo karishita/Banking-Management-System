@@ -911,6 +911,38 @@ void logout_admin(int fd, off_t offset)
 
 }
 
+int change_password_admin(const char *username, const char *new)
+{
+        struct admin_cred c;
+        int found=0;
+        int fd=open("ad.txt",O_RDWR);
+        if(fd<0)
+        {
+                perror("Open ad.txt");
+                return -1;
+        }
+        lock_file(fd,F_WRLCK);
+        //search for username
+        while(read(fd,&c,sizeof(c))==sizeof(c))
+        {
+                if (strcmp(c.username, username) == 0)
+                {
+                        found=1;
+                        strncpy(c.password,new,sizeof(c.password));
+                        c.password[sizeof(c.password)-1]='\0';
+                        lseek(fd,-sizeof(c),SEEK_CUR);
+                        write(fd,&c,sizeof(c));
+                        lock_file(fd,F_UNLCK);
+                        close(fd);
+                        return 1; // password changed successfully
+
+                }
+        }
+
+                       lock_file(fd,F_UNLCK);
+                        close(fd);
+                        return 0; // username incorrect
+}
 
 int main() {
 
@@ -1221,8 +1253,69 @@ int main() {
 			 write(nsd,"New Customer Account Added\n",strlen("New Customer Account Added\n"));
 		    
 		    }
+		    //Approve/Reject Loans
+		    if(a==2)
+		    {
+	            struct assign_req {
+                    int loan_id;
+                     char status;
+                     } req;
+
+    if (read(nsd, &req, sizeof(req)) <= 0) {
+        perror("read assign request");
+        return;
+    }
+
+    int success = 0;
+    int fd = open("loan.txt", O_RDWR);
+    if (fd < 0) {
+        perror("open for update");
+        write(nsd, &success, sizeof(success));
+        return -1;
+    }
+    struct loan ln;
+    while (read(fd, &ln, sizeof(ln)) == sizeof(ln)) {
+        if (ln.id == req.loan_id) {
+                //strncpy(ln.emp, req.emp, sizeof(ln.emp) - 1);
+               // ln.emp[sizeof(ln.emp) - 1] = '\0';
+	        ln.status=req.status;
+                lseek(fd, -sizeof(ln), SEEK_CUR);
+                write(fd, &ln, sizeof(ln));
+                success = 1;
+
+            break;
+        }
+    }
+
+    close(fd);
+
+    // Send result back to client
+    write(nsd, &success, sizeof(success));
+     }
+		    //View Assigned Loan Applications
+		    if(a==3)
+		    {
+                           struct loan ln;
+                      struct loan pending[100];  // buffer
+                       int count = 0;
+                       int fd = open("loan.txt", O_RDONLY);
+                       if (fd < 0) {
+                       perror("open loan.txt");
+                       return -1;
+
+                     }
+                       while (read(fd, &ln, sizeof(ln)) == sizeof(ln)) {
+                      if (ln.emp[0] !='\0') {
+                      pending[count++] = ln;
+        }
+    }
+    close(fd);
+                  //sending pending loan to client
+                    write(nsd, pending, count * sizeof(struct loan));
+
+		    }
 //View Customer Transaction
- if(a==6)
+ if(a==4)
   {
 
                            
@@ -1247,7 +1340,7 @@ int main() {
 
   }
 //Change Password
-   if(a==7)
+   if(a==5)
    {
 	    struct emp_cred c;
     read(nsd,&c,sizeof(c));
@@ -1262,7 +1355,7 @@ int main() {
 
    }
           //Logout Employee
-		    if(a==8)
+		    if(a==6)
 		    {
                      int fd;
                     off_t offset;
@@ -1404,7 +1497,7 @@ int main() {
 {
 	view_feedback(nsd);
 }
- 
+ //change password
 if(a==4)
 {
 	struct man_cred c;
@@ -1516,8 +1609,23 @@ if(ch==4)
 		        signup_man(recv_acc,nsd);
 			    }
 		    }
+		    //Change password
+		    if(a==2)
+		    {
+                           struct admin_cred c;
+    read(nsd,&c,sizeof(c));
+    int result=change_password_admin(c.username, c.password);
+    if(result==1)
+            write(nsd,"Password changed successfully\n",sizeof("Password changed successfully\n"));
+    else if(result==0)
+            write(nsd,"Incorrect username\n",sizeof("Incorrect username\n"));
+ else
+         write(nsd,"Error opening file\n",sizeof("Error opening file\n"
+));
+
+		    }
 		    //Logout Administrator
-		    if(a==5)
+		    if(a==3)
 		    {
                            int fd;
                     off_t offset;
