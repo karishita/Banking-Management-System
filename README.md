@@ -56,4 +56,8 @@ Persistent data files used:
 - Structure based data management
 - Role based access with one login session per user
 - File Locking to prevent race condition and inconsistent updates
+
+  ## Class Diagram
+  <img width="1438" height="898" alt="image" src="https://github.com/user-attachments/assets/41e0282f-327b-47d8-8dac-c057dd053212" />
+
  
