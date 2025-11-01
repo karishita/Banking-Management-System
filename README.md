@@ -61,3 +61,12 @@ Persistent data files used:
   <img width="1438" height="898" alt="image" src="https://github.com/user-attachments/assets/41e0282f-327b-47d8-8dac-c057dd053212" />
 
  
+## How to Run
+
+gcc client.c -o client
+gcc server.c -o server
+
+# In one terminal
+./server
+# In a separate terminal
+./client
