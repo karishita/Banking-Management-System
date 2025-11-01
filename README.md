@@ -50,10 +50,10 @@ Persistent data files used:
 
 ##Concepts Used
 
--Socket Programming
--System Calls: open, read, write, lseek
--File based persistent storage
--Structure based data management
+- Socket Programming
+- System Calls: open, read, write, lseek
+- File based persistent storage
+- Structure based data management
 - Role based access with one login session per user
 - File Locking to prevent race condition and inconsistent updates
-- 
+ 
