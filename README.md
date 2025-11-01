@@ -48,7 +48,7 @@ Persistent data files used:
 | `man_cred.txt`  | Manager login credentials               |
 | `admin_cred.txt`| Admin login credentials                 |
 
-##Concepts Used
+## Concepts Used
 
 - Socket Programming
 - System Calls: open, read, write, lseek
